@@ -1,0 +1,46 @@
+name: Build and Deploy to ECS
+
+on:
+  push:
+    branches: [ master ]
+    
+env:
+  AWS_REGION: us-east-1
+  DOCKER_IMAGE: bitlinksai/nest-project-test
+  ECS_CLUSTER: nest-project-test
+  ECS_SERVICE: nest-project-test-service-af7y30rp
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+    - name: Build and push Docker image
+      run: |
+        docker build --no-cache -t ${{ env.DOCKER_IMAGE }}:latest .
+        docker tag ${{ env.DOCKER_IMAGE }}:latest ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+        docker push ${{ env.DOCKER_IMAGE }}:latest
+        docker push ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+
+    - name: Force new ECS deployment
+      run: |
+        aws ecs update-service \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --service ${{ env.ECS_SERVICE }} \
+          --force-new-deployment
